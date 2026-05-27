@@ -25,6 +25,9 @@ docker-compose.override.yml
 .env.local
 .env.production
 
+# Brainstorming artifacts
+.superpowers/
+
 # Sensitive data
 .claude/settings.local.json
 backend/data/*.json
