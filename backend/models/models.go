@@ -1,0 +1,117 @@
+package models
+
+import "time"
+
+type DailyReport struct {
+	Date      string    `json:"date"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type WeeklyReport struct {
+	ID        string    `json:"id"`
+	WeekStart string    `json:"week_start"`
+	WeekEnd   string    `json:"week_end"`
+	Content   string    `json:"content"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type DailyReportReq struct {
+	Date    string `json:"date"`
+	Content string `json:"content"`
+}
+
+type GenerateReq struct {
+	WeekStart string `json:"week_start"`
+	WeekEnd   string `json:"week_end"`
+}
+
+type UpdateWeeklyReq struct {
+	Content string `json:"content"`
+	Status  string `json:"status"`
+}
+
+type AISettings struct {
+	Provider string `json:"provider"`
+	BaseURL  string `json:"base_url"`
+	APIKey   string `json:"api_key"`
+	Model    string `json:"model"`
+}
+
+type User struct {
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"password_hash"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type LoginReq struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type LoginResp struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
+}
+
+type ReminderTask struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Enabled      bool      `json:"enabled"`
+	ScheduleType string    `json:"schedule_type"`
+	Time         string    `json:"time"`
+	Weekday      int       `json:"weekday"`
+	Message      string    `json:"message"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type UpdateReminderReq struct {
+	Name         *string `json:"name,omitempty"`
+	Enabled      *bool   `json:"enabled,omitempty"`
+	ScheduleType *string `json:"schedule_type,omitempty"`
+	Time         *string `json:"time,omitempty"`
+	Weekday      *int    `json:"weekday,omitempty"`
+	Message      *string `json:"message,omitempty"`
+}
+
+type SMTPConfig struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type FullSettings struct {
+	AI      AISettings     `json:"ai"`
+	SMTP    SMTPConfig     `json:"smtp"`
+	Reminders []ReminderTask `json:"reminders"`
+}
+
+func DefaultReminders() []ReminderTask {
+	now := time.Now()
+	return []ReminderTask{
+		{
+			ID:           "default-daily-report",
+			Name:         "填写日报",
+			Enabled:      true,
+			ScheduleType: "daily",
+			Time:         "18:00",
+			Weekday:      0,
+			Message:      "该填写今天的日报啦，记得记录今日工作内容。",
+			CreatedAt:    now,
+		},
+		{
+			ID:           "default-weekly-report",
+			Name:         "填写周报",
+			Enabled:      true,
+			ScheduleType: "weekly",
+			Time:         "17:00",
+			Weekday:      5,
+			Message:      "该填写本周周报啦，记得总结本周工作内容。",
+			CreatedAt:    now,
+		},
+	}
+}

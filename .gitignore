@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build output
+dist/
+*.exe
+report-server
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Sensitive data
+.claude/settings.local.json
+backend/data/*.json
+frontend/data/*.json
+
+# Temp files
+*.exe~
+report-server.exe

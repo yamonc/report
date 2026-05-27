@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  work-report:
+    build: .
+    container_name: work-report
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      # 持久化数据：JSON 文件存储在宿主机 ./data 目录
+      - ./data:/data
+    environment:
+      - PORT=8080
+      - DB_PATH=/data
+      - JWT_SECRET=${JWT_SECRET:-report-jwt-secret}
+      # DEEPSEEK_API_KEY 在 .env 文件中配置，或直接写在这里
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
