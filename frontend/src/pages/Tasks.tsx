@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2, AlertCircle, Clock } from 'lucide-react'
+import { Plus, Trash2, Clock } from 'lucide-react'
 import { api } from '../lib/api'
 import MarkdownEditor from '../components/MarkdownEditor'
 import MarkdownPreview from '../components/MarkdownPreview'
@@ -34,8 +34,8 @@ const PRIORITY_BORDER: Record<string, string> = {
 interface FormData {
   title: string
   description: string
-  status: string
-  priority: string
+  status: Task['status']
+  priority: Task['priority']
   category: string
   due_date: string
 }

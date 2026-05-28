@@ -13,7 +13,7 @@ const TYPES = [
 
 interface FormData {
   title: string
-  type: string
+  type: KnowledgeItem['type']
   content: string
   source_url: string
   tags: string
