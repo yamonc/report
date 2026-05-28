@@ -66,7 +66,7 @@ export default function TasksPage() {
     } catch { /* ignore */ } finally { setLoading(false) }
   }
 
-  function openCreate(status: string) {
+  function openCreate(status: Task['status']) {
     setEditing(null)
     setForm({ ...emptyForm, status })
     setShowModal(true)
@@ -251,7 +251,7 @@ export default function TasksPage() {
                   <label className="block text-sm font-medium text-text-secondary mb-1.5">状态</label>
                   <select
                     value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    onChange={(e) => setForm({ ...form, status: e.target.value as Task['status'] })}
                     className="w-full rounded-xl border border-border bg-bg-root px-3 py-2.5 text-sm text-text-primary focus:border-border-focus transition-all"
                   >
                     {STATUSES.map((s) => (
@@ -263,7 +263,7 @@ export default function TasksPage() {
                   <label className="block text-sm font-medium text-text-secondary mb-1.5">优先级</label>
                   <select
                     value={form.priority}
-                    onChange={(e) => setForm({ ...form, priority: e.target.value })}
+                    onChange={(e) => setForm({ ...form, priority: e.target.value as Task['priority'] })}
                     className="w-full rounded-xl border border-border bg-bg-root px-3 py-2.5 text-sm text-text-primary focus:border-border-focus transition-all"
                   >
                     {PRIORITIES.map((p) => (
