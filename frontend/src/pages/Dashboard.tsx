@@ -1,26 +1,32 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarDays, FileText, ArrowRight, Plus, Sparkles } from 'lucide-react'
+import { CalendarDays, FileText, ArrowRight, Plus, Sparkles, CheckSquare, Bookmark } from 'lucide-react'
 import { api } from '../lib/api'
 import { getToday, getWeekStart, getWeekEnd } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
-import type { DailyReport, WeeklyReport } from '../types'
+import type { DailyReport, KnowledgeItem, Task, WeeklyReport } from '../types'
 
 export default function Dashboard() {
   const { user } = useAuth()
   const [todayReport, setTodayReport] = useState<DailyReport | null>(null)
   const [weekReport, setWeekReport] = useState<WeeklyReport | null>(null)
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [recentKnowledge, setRecentKnowledge] = useState<KnowledgeItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       try {
-        const [daily, weekReport] = await Promise.all([
+        const [daily, weekReport, tasksData, knowledgeData] = await Promise.all([
           api.getDailyReport(getToday()).catch(() => null),
           api.getWeeklyReport(`${getWeekStart()}_${getWeekEnd()}`).catch(() => null),
+          api.listTasks().catch(() => []),
+          api.listKnowledge().catch(() => []),
         ])
         setTodayReport(daily)
         setWeekReport(weekReport)
+        setTasks(tasksData || [])
+        setRecentKnowledge((knowledgeData || []).slice(0, 3))
       } catch {
         // ignore
       } finally {
@@ -38,13 +44,18 @@ export default function Dashboard() {
           <div className="skeleton h-5 w-64" />
         </div>
         <div className="grid gap-6 md:grid-cols-2">
-          {[1, 2].map((i) => (
+          {[1, 2, 3, 4].map((i) => (
             <div key={i} className="skeleton h-44 rounded-xl" />
           ))}
         </div>
       </div>
     )
   }
+
+  const todoCount = tasks.filter((t) => t.status === 'todo').length
+  const doingCount = tasks.filter((t) => t.status === 'doing').length
+  const today = getToday()
+  const dueTodayCount = tasks.filter((t) => t.due_date === today && t.status !== 'done').length
 
   return (
     <div className="space-y-10">
@@ -123,6 +134,86 @@ export default function Dashboard() {
               <span className="inline-flex items-center gap-1 rounded-full bg-purple-bg px-2.5 py-1 text-xs font-medium text-purple">
                 <Sparkles className="h-3 w-3" />
                 AI 生成
+              </span>
+            )}
+          </div>
+        </Link>
+
+        {/* Tasks card */}
+        <Link
+          to="/tasks"
+          className="group animate-fade-up stagger-3 rounded-xl border border-border bg-bg-elevated p-6 transition-all duration-300 hover:border-accent/25 hover:shadow-[0_0_30px_var(--accent-glow)]"
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success-bg">
+              <CheckSquare className="h-5 w-5 text-success" />
+            </div>
+            <ArrowRight className="h-4 w-4 text-text-tertiary opacity-0 translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0" />
+          </div>
+          <h3 className="mt-5 font-serif text-lg font-semibold text-text-primary">任务概览</h3>
+          <p className="mt-1.5 text-sm text-text-secondary">
+            {tasks.length > 0
+              ? `待处理 ${todoCount} 个，进行中 ${doingCount} 个`
+              : '暂无任务，点击创建'}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {todoCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2.5 py-1 text-xs font-medium text-warning">
+                待处理 {todoCount}
+              </span>
+            )}
+            {doingCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-info-bg px-2.5 py-1 text-xs font-medium text-info">
+                进行中 {doingCount}
+              </span>
+            )}
+            {dueTodayCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-600">
+                今日到期 {dueTodayCount}
+              </span>
+            )}
+            {tasks.length === 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-purple-bg px-2.5 py-1 text-xs font-medium text-purple">
+                <Plus className="h-3 w-3" />
+                创建任务
+              </span>
+            )}
+          </div>
+        </Link>
+
+        {/* Knowledge card */}
+        <Link
+          to="/knowledge"
+          className="group animate-fade-up stagger-4 rounded-xl border border-border bg-bg-elevated p-6 transition-all duration-300 hover:border-accent/25 hover:shadow-[0_0_30px_var(--accent-glow)]"
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-info-bg">
+              <Bookmark className="h-5 w-5 text-info" />
+            </div>
+            <ArrowRight className="h-4 w-4 text-text-tertiary opacity-0 translate-x-1 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0" />
+          </div>
+          <h3 className="mt-5 font-serif text-lg font-semibold text-text-primary">最近收藏</h3>
+          <p className="mt-1.5 text-sm text-text-secondary">
+            {recentKnowledge.length > 0
+              ? `共 ${recentKnowledge.length} 条知识片段`
+              : '暂无收藏，点击添加'}
+          </p>
+          <div className="mt-4">
+            {recentKnowledge.length > 0 ? (
+              <div className="space-y-1">
+                {recentKnowledge.map((item) => (
+                  <div key={item.id} className="flex items-center gap-1.5 text-xs text-text-secondary truncate">
+                    <span className="text-text-tertiary shrink-0">
+                      {item.type === 'link' ? '🔗' : item.type === 'snippet' ? '💻' : '📝'}
+                    </span>
+                    <span className="truncate">{item.title}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-purple-bg px-2.5 py-1 text-xs font-medium text-purple">
+                <Plus className="h-3 w-3" />
+                添加知识
               </span>
             )}
           </div>

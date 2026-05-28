@@ -90,6 +90,50 @@ type FullSettings struct {
 	Reminders []ReminderTask `json:"reminders"`
 }
 
+type Task struct {
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Status      string    `json:"status"`
+	Priority    string    `json:"priority"`
+	Category    string    `json:"category"`
+	DueDate     string    `json:"due_date"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type TaskReq struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+	Priority    string `json:"priority"`
+	Category    string `json:"category"`
+	DueDate     string `json:"due_date"`
+}
+
+type TaskStatusReq struct {
+	Status string `json:"status"`
+}
+
+type KnowledgeItem struct {
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Type      string    `json:"type"`
+	Content   string    `json:"content"`
+	SourceURL string    `json:"source_url"`
+	Tags      []string  `json:"tags"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type KnowledgeReq struct {
+	Title     string   `json:"title"`
+	Type      string   `json:"type"`
+	Content   string   `json:"content"`
+	SourceURL string   `json:"source_url"`
+	Tags      []string `json:"tags"`
+}
+
 func DefaultReminders() []ReminderTask {
 	now := time.Now()
 	return []ReminderTask{

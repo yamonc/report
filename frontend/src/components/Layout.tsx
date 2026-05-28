@@ -1,12 +1,18 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { CalendarDays, FileText, LayoutDashboard } from 'lucide-react'
+import { CalendarDays, FileText, LayoutDashboard, CheckSquare, Bookmark, Settings as SettingsIcon } from 'lucide-react'
 import UserPopover from './UserPopover'
 import { useAuth } from '../context/AuthContext'
 
 const navItems = [
-  { to: '/', icon: LayoutDashboard, label: '仪表盘' },
+  { to: '/dashboard', icon: LayoutDashboard, label: '仪表盘' },
   { to: '/daily', icon: CalendarDays, label: '日报' },
   { to: '/weekly', icon: FileText, label: '周报' },
+  { to: '/tasks', icon: CheckSquare, label: '任务' },
+  { to: '/knowledge', icon: Bookmark, label: '知识' },
+]
+
+const bottomNavItems = [
+  { to: '/settings', icon: SettingsIcon, label: '设置' },
 ]
 
 export default function Layout() {
@@ -32,7 +38,7 @@ export default function Layout() {
             <NavLink
               key={to}
               to={to}
-              end={to === '/'}
+              end={to === '/dashboard'}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                   isActive
@@ -46,6 +52,26 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+
+        {/* Bottom nav */}
+        <div className="border-t border-border-subtle px-3 py-3 space-y-0.5">
+          {bottomNavItems.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'bg-accent-subtle text-accent border border-accent/10'
+                    : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary border border-transparent'
+                }`
+              }
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </NavLink>
+          ))}
+        </div>
 
         {/* Bottom — user bar */}
         <div className="border-t border-border-subtle px-3 py-3">

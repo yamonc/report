@@ -60,3 +60,43 @@ export interface FullSettings {
   smtp: SMTPConfig
   reminders: ReminderTask[]
 }
+
+export interface Task {
+  id: string
+  title: string
+  description: string
+  status: 'todo' | 'doing' | 'done'
+  priority: 'high' | 'medium' | 'low'
+  category: string
+  due_date: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TaskReq {
+  title: string
+  description: string
+  status: string
+  priority: string
+  category: string
+  due_date: string
+}
+
+export interface KnowledgeItem {
+  id: string
+  title: string
+  type: 'note' | 'link' | 'snippet'
+  content: string
+  source_url: string
+  tags: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface KnowledgeReq {
+  title: string
+  type: string
+  content: string
+  source_url: string
+  tags: string[]
+}

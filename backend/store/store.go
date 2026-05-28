@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -300,6 +301,195 @@ func (s *Store) DeleteReminder(id string) error {
 		}
 	}
 	return fmt.Errorf("提醒不存在: %s", id)
+}
+
+func (s *Store) tasksPath() string {
+	return filepath.Join(s.dir, "tasks.json")
+}
+
+func (s *Store) knowledgePath() string {
+	return filepath.Join(s.dir, "knowledge.json")
+}
+
+// Tasks
+
+func (s *Store) ListTasks(status, category, priority string) ([]models.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var tasks []models.Task
+	s.readJSON(s.tasksPath(), &tasks)
+
+	result := make([]models.Task, 0)
+	for _, t := range tasks {
+		if status != "" && t.Status != status {
+			continue
+		}
+		if category != "" && t.Category != category {
+			continue
+		}
+		if priority != "" && t.Priority != priority {
+			continue
+		}
+		result = append(result, t)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
+
+	return result, nil
+}
+
+func (s *Store) GetTask(id string) (*models.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var tasks []models.Task
+	s.readJSON(s.tasksPath(), &tasks)
+
+	for _, t := range tasks {
+		if t.ID == id {
+			return &t, nil
+		}
+	}
+	return nil, fmt.Errorf("任务不存在: %s", id)
+}
+
+func (s *Store) SaveTask(t models.Task) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var tasks []models.Task
+	s.readJSON(s.tasksPath(), &tasks)
+
+	now := time.Now()
+	for i, existing := range tasks {
+		if existing.ID == t.ID {
+			t.CreatedAt = existing.CreatedAt
+			t.UpdatedAt = now
+			tasks[i] = t
+			return s.writeJSON(s.tasksPath(), tasks)
+		}
+	}
+
+	t.CreatedAt = now
+	t.UpdatedAt = now
+	tasks = append(tasks, t)
+	return s.writeJSON(s.tasksPath(), tasks)
+}
+
+func (s *Store) DeleteTask(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var tasks []models.Task
+	s.readJSON(s.tasksPath(), &tasks)
+
+	for i, t := range tasks {
+		if t.ID == id {
+			tasks = append(tasks[:i], tasks[i+1:]...)
+			return s.writeJSON(s.tasksPath(), tasks)
+		}
+	}
+	return fmt.Errorf("任务不存在: %s", id)
+}
+
+// Knowledge
+
+func (s *Store) ListKnowledge(search, itemType, tag string) ([]models.KnowledgeItem, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var items []models.KnowledgeItem
+	s.readJSON(s.knowledgePath(), &items)
+
+	result := make([]models.KnowledgeItem, 0)
+	for _, item := range items {
+		if itemType != "" && item.Type != itemType {
+			continue
+		}
+		if search != "" {
+			lower := strings.ToLower(search)
+			if !strings.Contains(strings.ToLower(item.Title), lower) &&
+				!strings.Contains(strings.ToLower(item.Content), lower) {
+				continue
+			}
+		}
+		if tag != "" {
+			found := false
+			for _, t := range item.Tags {
+				if t == tag {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		result = append(result, item)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
+
+	return result, nil
+}
+
+func (s *Store) GetKnowledge(id string) (*models.KnowledgeItem, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var items []models.KnowledgeItem
+	s.readJSON(s.knowledgePath(), &items)
+
+	for _, item := range items {
+		if item.ID == id {
+			return &item, nil
+		}
+	}
+	return nil, fmt.Errorf("知识片段不存在: %s", id)
+}
+
+func (s *Store) SaveKnowledge(item models.KnowledgeItem) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var items []models.KnowledgeItem
+	s.readJSON(s.knowledgePath(), &items)
+
+	now := time.Now()
+	for i, existing := range items {
+		if existing.ID == item.ID {
+			item.CreatedAt = existing.CreatedAt
+			item.UpdatedAt = now
+			items[i] = item
+			return s.writeJSON(s.knowledgePath(), items)
+		}
+	}
+
+	item.CreatedAt = now
+	item.UpdatedAt = now
+	items = append(items, item)
+	return s.writeJSON(s.knowledgePath(), items)
+}
+
+func (s *Store) DeleteKnowledge(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var items []models.KnowledgeItem
+	s.readJSON(s.knowledgePath(), &items)
+
+	for i, item := range items {
+		if item.ID == id {
+			items = append(items[:i], items[i+1:]...)
+			return s.writeJSON(s.knowledgePath(), items)
+		}
+	}
+	return fmt.Errorf("知识片段不存在: %s", id)
 }
 
 func (s *Store) SaveAllReminders(reminders []models.ReminderTask) error {

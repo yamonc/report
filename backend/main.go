@@ -45,6 +45,8 @@ func main() {
 	settingsHandler := handlers.NewSettingsHandler(s)
 	authHandler := handlers.NewAuthHandler(s, cfg.JWTSecret)
 	remindersHandler := handlers.NewRemindersHandler(s)
+	tasksHandler := handlers.NewTasksHandler(s)
+	knowledgeHandler := handlers.NewKnowledgeHandler(s)
 
 	mux := http.NewServeMux()
 
@@ -69,6 +71,10 @@ func main() {
 	mux.Handle("/api/v1/settings/", settingsHandler)
 	mux.Handle("/api/v1/reminders", remindersHandler)
 	mux.Handle("/api/v1/reminders/", remindersHandler)
+	mux.Handle("/api/v1/tasks", tasksHandler)
+	mux.Handle("/api/v1/tasks/", tasksHandler)
+	mux.Handle("/api/v1/knowledge", knowledgeHandler)
+	mux.Handle("/api/v1/knowledge/", knowledgeHandler)
 
 	// Middleware chain: cors → auth → mux
 	handler := corsMiddleware(middleware.AuthMiddleware(cfg.JWTSecret)(mux))
