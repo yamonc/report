@@ -57,8 +57,9 @@ func (h *SettingsHandler) get(w http.ResponseWriter, r *http.Request) {
 	if settings.AI.Provider == "" {
 		settings.AI.Provider = "deepseek"
 	}
-	if settings.Reminders == nil {
+	if len(settings.Reminders) == 0 {
 		settings.Reminders = models.DefaultReminders()
+		h.store.SaveFullSettings(settings)
 	}
 
 	writeJSON(w, http.StatusOK, settings)

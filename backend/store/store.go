@@ -1,525 +1,715 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"path/filepath"
 	"sort"
-	"strings"
-	"sync"
 	"time"
 
 	"report/backend/models"
+
+	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	dir string
-	mu  sync.RWMutex
+	db *sql.DB
 }
 
 func New(dir string) *Store {
 	os.MkdirAll(dir, 0755)
-	return &Store{dir: dir}
-}
 
-func (s *Store) dailyPath() string {
-	return filepath.Join(s.dir, "daily_reports.json")
-}
-
-func (s *Store) weeklyPath() string {
-	return filepath.Join(s.dir, "weekly_reports.json")
-}
-
-func (s *Store) settingsPath() string {
-	return filepath.Join(s.dir, "settings.json")
-}
-
-func (s *Store) usersPath() string {
-	return filepath.Join(s.dir, "users.json")
-}
-
-func (s *Store) remindersPath() string {
-	return filepath.Join(s.dir, "reminders.json")
-}
-
-func (s *Store) readJSON(path string, v interface{}) error {
-	data, err := ioutil.ReadFile(path)
+	dbPath := dir + "/report.db"
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
+		panic(fmt.Sprintf("open database: %v", err))
 	}
-	return json.Unmarshal(data, v)
+
+	db.Exec("PRAGMA journal_mode=WAL")
+	db.Exec("PRAGMA busy_timeout=5000")
+
+	s := &Store{db: db}
+	s.createTables()
+	s.migrateFromJSON(dir)
+	return s
 }
 
-func (s *Store) writeJSON(path string, v interface{}) error {
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(path, data, 0644)
+// --- helpers ---
+
+func formatTime(t time.Time) string {
+	return t.Format(time.RFC3339Nano)
 }
 
-// Daily Reports
+func parseTime(s string) (time.Time, error) {
+	return time.Parse(time.RFC3339Nano, s)
+}
+
+func marshalTags(tags []string) string {
+	if tags == nil {
+		return "[]"
+	}
+	b, _ := json.Marshal(tags)
+	return string(b)
+}
+
+func unmarshalTags(s string) []string {
+	var tags []string
+	json.Unmarshal([]byte(s), &tags)
+	if tags == nil {
+		tags = []string{}
+	}
+	return tags
+}
+
+// ============ Daily Reports ============
 
 func (s *Store) SaveDailyReport(r models.DailyReport) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var reports []models.DailyReport
-	s.readJSON(s.dailyPath(), &reports)
-
 	now := time.Now()
-	for i, existing := range reports {
-		if existing.Date == r.Date {
-			r.CreatedAt = existing.CreatedAt
-			r.UpdatedAt = now
-			reports[i] = r
-			return s.writeJSON(s.dailyPath(), reports)
-		}
+	existing, err := s.GetDailyReport(r.Date)
+	if err == nil {
+		r.CreatedAt = existing.CreatedAt
+	} else {
+		r.CreatedAt = now
 	}
-
-	r.CreatedAt = now
 	r.UpdatedAt = now
-	reports = append(reports, r)
-	return s.writeJSON(s.dailyPath(), reports)
+
+	_, err = s.db.Exec(
+		`INSERT OR REPLACE INTO daily_reports (date, content, created_at, updated_at)
+		 VALUES (?, ?, ?, ?)`,
+		r.Date, r.Content, formatTime(r.CreatedAt), formatTime(r.UpdatedAt),
+	)
+	return err
 }
 
 func (s *Store) GetDailyReport(date string) (*models.DailyReport, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var reports []models.DailyReport
-	s.readJSON(s.dailyPath(), &reports)
-
-	for _, r := range reports {
-		if r.Date == date {
-			return &r, nil
-		}
+	var r models.DailyReport
+	var ca, ua string
+	err := s.db.QueryRow(
+		`SELECT date, content, created_at, updated_at FROM daily_reports WHERE date = ?`,
+		date,
+	).Scan(&r.Date, &r.Content, &ca, &ua)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("日报不存在: %s", date)
 	}
-	return nil, fmt.Errorf("日报不存在: %s", date)
+	if err != nil {
+		return nil, err
+	}
+	r.CreatedAt, _ = parseTime(ca)
+	r.UpdatedAt, _ = parseTime(ua)
+	return &r, nil
 }
 
 func (s *Store) ListDailyReports(from, to string) ([]models.DailyReport, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	q := "SELECT date, content, created_at, updated_at FROM daily_reports WHERE 1=1"
+	args := []interface{}{}
+	if from != "" {
+		q += " AND date >= ?"
+		args = append(args, from)
+	}
+	if to != "" {
+		q += " AND date <= ?"
+		args = append(args, to)
+	}
+	q += " ORDER BY date DESC"
 
-	var reports []models.DailyReport
-	s.readJSON(s.dailyPath(), &reports)
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
 	result := make([]models.DailyReport, 0)
-	for _, r := range reports {
-		if from != "" && r.Date < from {
-			continue
+	for rows.Next() {
+		var r models.DailyReport
+		var ca, ua string
+		if err := rows.Scan(&r.Date, &r.Content, &ca, &ua); err != nil {
+			return nil, err
 		}
-		if to != "" && r.Date > to {
-			continue
-		}
+		r.CreatedAt, _ = parseTime(ca)
+		r.UpdatedAt, _ = parseTime(ua)
 		result = append(result, r)
 	}
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Date > result[j].Date
-	})
-
-	return result, nil
+	return result, rows.Err()
 }
 
-// Weekly Reports
+func (s *Store) DeleteDailyReport(date string) error {
+	result, err := s.db.Exec(`DELETE FROM daily_reports WHERE date = ?`, date)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("日报不存在: %s", date)
+	}
+	return nil
+}
+
+// ============ Weekly Reports ============
 
 func (s *Store) SaveWeeklyReport(r models.WeeklyReport) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var reports []models.WeeklyReport
-	s.readJSON(s.weeklyPath(), &reports)
-
 	now := time.Now()
-	for i, existing := range reports {
-		if existing.ID == r.ID {
-			r.CreatedAt = existing.CreatedAt
-			r.UpdatedAt = now
-			reports[i] = r
-			return s.writeJSON(s.weeklyPath(), reports)
-		}
+	existing, err := s.GetWeeklyReport(r.ID)
+	if err == nil {
+		r.CreatedAt = existing.CreatedAt
+	} else {
+		r.CreatedAt = now
 	}
-
-	r.CreatedAt = now
 	r.UpdatedAt = now
-	reports = append(reports, r)
-	return s.writeJSON(s.weeklyPath(), reports)
+
+	_, err = s.db.Exec(
+		`INSERT OR REPLACE INTO weekly_reports (id, week_start, week_end, content, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		r.ID, r.WeekStart, r.WeekEnd, r.Content, r.Status,
+		formatTime(r.CreatedAt), formatTime(r.UpdatedAt),
+	)
+	return err
 }
 
 func (s *Store) GetWeeklyReport(id string) (*models.WeeklyReport, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var reports []models.WeeklyReport
-	s.readJSON(s.weeklyPath(), &reports)
-
-	for _, r := range reports {
-		if r.ID == id {
-			return &r, nil
-		}
+	var r models.WeeklyReport
+	var ca, ua string
+	err := s.db.QueryRow(
+		`SELECT id, week_start, week_end, content, status, created_at, updated_at
+		 FROM weekly_reports WHERE id = ?`, id,
+	).Scan(&r.ID, &r.WeekStart, &r.WeekEnd, &r.Content, &r.Status, &ca, &ua)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("周报不存在: %s", id)
 	}
-	return nil, fmt.Errorf("周报不存在: %s", id)
+	if err != nil {
+		return nil, err
+	}
+	r.CreatedAt, _ = parseTime(ca)
+	r.UpdatedAt, _ = parseTime(ua)
+	return &r, nil
 }
 
 func (s *Store) ListWeeklyReports(weekStart string) ([]models.WeeklyReport, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	q := "SELECT id, week_start, week_end, content, status, created_at, updated_at FROM weekly_reports WHERE 1=1"
+	args := []interface{}{}
+	if weekStart != "" {
+		q += " AND week_start = ?"
+		args = append(args, weekStart)
+	}
+	q += " ORDER BY week_start DESC"
 
-	var reports []models.WeeklyReport
-	s.readJSON(s.weeklyPath(), &reports)
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
 	result := make([]models.WeeklyReport, 0)
-	for _, r := range reports {
-		if weekStart != "" && r.WeekStart != weekStart {
-			continue
+	for rows.Next() {
+		var r models.WeeklyReport
+		var ca, ua string
+		if err := rows.Scan(&r.ID, &r.WeekStart, &r.WeekEnd, &r.Content, &r.Status, &ca, &ua); err != nil {
+			return nil, err
 		}
+		r.CreatedAt, _ = parseTime(ca)
+		r.UpdatedAt, _ = parseTime(ua)
 		result = append(result, r)
 	}
-
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].WeekStart > result[j].WeekStart
 	})
-
-	return result, nil
+	return result, rows.Err()
 }
 
 func (s *Store) FindWeeklyByWeek(weekStart, weekEnd string) (*models.WeeklyReport, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var reports []models.WeeklyReport
-	s.readJSON(s.weeklyPath(), &reports)
-
-	for _, r := range reports {
-		if r.WeekStart == weekStart && r.WeekEnd == weekEnd {
-			return &r, nil
-		}
+	var r models.WeeklyReport
+	var ca, ua string
+	err := s.db.QueryRow(
+		`SELECT id, week_start, week_end, content, status, created_at, updated_at
+		 FROM weekly_reports WHERE week_start = ? AND week_end = ?`,
+		weekStart, weekEnd,
+	).Scan(&r.ID, &r.WeekStart, &r.WeekEnd, &r.Content, &r.Status, &ca, &ua)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("周报不存在")
 	}
-	return nil, fmt.Errorf("周报不存在")
+	if err != nil {
+		return nil, err
+	}
+	r.CreatedAt, _ = parseTime(ca)
+	r.UpdatedAt, _ = parseTime(ua)
+	return &r, nil
+}
+
+// ============ Settings ============
+
+func (s *Store) ensureSettingsRow() {
+	s.db.Exec(`INSERT OR IGNORE INTO settings (id) VALUES (1)`)
 }
 
 func (s *Store) GetSettings() (*models.AISettings, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+	s.ensureSettingsRow()
 	var settings models.AISettings
-	if err := s.readJSON(s.settingsPath(), &settings); err != nil {
+	err := s.db.QueryRow(
+		`SELECT ai_provider, ai_base_url, ai_api_key, ai_model FROM settings WHERE id = 1`,
+	).Scan(&settings.Provider, &settings.BaseURL, &settings.APIKey, &settings.Model)
+	if err != nil {
 		return nil, err
 	}
 	return &settings, nil
 }
 
 func (s *Store) SaveSettings(settings *models.AISettings) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.writeJSON(s.settingsPath(), settings)
+	s.ensureSettingsRow()
+	_, err := s.db.Exec(
+		`UPDATE settings SET ai_provider=?, ai_base_url=?, ai_api_key=?, ai_model=? WHERE id=1`,
+		settings.Provider, settings.BaseURL, settings.APIKey, settings.Model,
+	)
+	return err
 }
-
-// Users
-
-func (s *Store) SaveUser(u models.User) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var users []models.User
-	s.readJSON(s.usersPath(), &users)
-
-	for i, existing := range users {
-		if existing.Email == u.Email {
-			users[i] = u
-			return s.writeJSON(s.usersPath(), users)
-		}
-	}
-	users = append(users, u)
-	return s.writeJSON(s.usersPath(), users)
-}
-
-func (s *Store) GetUser(email string) (*models.User, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var users []models.User
-	s.readJSON(s.usersPath(), &users)
-
-	for _, u := range users {
-		if u.Email == email {
-			return &u, nil
-		}
-	}
-	return nil, fmt.Errorf("用户不存在: %s", email)
-}
-
-// Reminders
-
-func (s *Store) ListReminders() ([]models.ReminderTask, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var reminders []models.ReminderTask
-	s.readJSON(s.remindersPath(), &reminders)
-	if reminders == nil {
-		reminders = []models.ReminderTask{}
-	}
-	return reminders, nil
-}
-
-func (s *Store) SaveReminder(r models.ReminderTask) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var reminders []models.ReminderTask
-	s.readJSON(s.remindersPath(), &reminders)
-
-	for i, existing := range reminders {
-		if existing.ID == r.ID {
-			reminders[i] = r
-			return s.writeJSON(s.remindersPath(), reminders)
-		}
-	}
-	reminders = append(reminders, r)
-	return s.writeJSON(s.remindersPath(), reminders)
-}
-
-func (s *Store) DeleteReminder(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var reminders []models.ReminderTask
-	s.readJSON(s.remindersPath(), &reminders)
-
-	for i, r := range reminders {
-		if r.ID == id {
-			reminders = append(reminders[:i], reminders[i+1:]...)
-			return s.writeJSON(s.remindersPath(), reminders)
-		}
-	}
-	return fmt.Errorf("提醒不存在: %s", id)
-}
-
-func (s *Store) tasksPath() string {
-	return filepath.Join(s.dir, "tasks.json")
-}
-
-func (s *Store) knowledgePath() string {
-	return filepath.Join(s.dir, "knowledge.json")
-}
-
-// Tasks
-
-func (s *Store) ListTasks(status, category, priority string) ([]models.Task, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var tasks []models.Task
-	s.readJSON(s.tasksPath(), &tasks)
-
-	result := make([]models.Task, 0)
-	for _, t := range tasks {
-		if status != "" && t.Status != status {
-			continue
-		}
-		if category != "" && t.Category != category {
-			continue
-		}
-		if priority != "" && t.Priority != priority {
-			continue
-		}
-		result = append(result, t)
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].CreatedAt.After(result[j].CreatedAt)
-	})
-
-	return result, nil
-}
-
-func (s *Store) GetTask(id string) (*models.Task, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var tasks []models.Task
-	s.readJSON(s.tasksPath(), &tasks)
-
-	for _, t := range tasks {
-		if t.ID == id {
-			return &t, nil
-		}
-	}
-	return nil, fmt.Errorf("任务不存在: %s", id)
-}
-
-func (s *Store) SaveTask(t models.Task) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var tasks []models.Task
-	s.readJSON(s.tasksPath(), &tasks)
-
-	now := time.Now()
-	for i, existing := range tasks {
-		if existing.ID == t.ID {
-			t.CreatedAt = existing.CreatedAt
-			t.UpdatedAt = now
-			tasks[i] = t
-			return s.writeJSON(s.tasksPath(), tasks)
-		}
-	}
-
-	t.CreatedAt = now
-	t.UpdatedAt = now
-	tasks = append(tasks, t)
-	return s.writeJSON(s.tasksPath(), tasks)
-}
-
-func (s *Store) DeleteTask(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var tasks []models.Task
-	s.readJSON(s.tasksPath(), &tasks)
-
-	for i, t := range tasks {
-		if t.ID == id {
-			tasks = append(tasks[:i], tasks[i+1:]...)
-			return s.writeJSON(s.tasksPath(), tasks)
-		}
-	}
-	return fmt.Errorf("任务不存在: %s", id)
-}
-
-// Knowledge
-
-func (s *Store) ListKnowledge(search, itemType, tag string) ([]models.KnowledgeItem, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var items []models.KnowledgeItem
-	s.readJSON(s.knowledgePath(), &items)
-
-	result := make([]models.KnowledgeItem, 0)
-	for _, item := range items {
-		if itemType != "" && item.Type != itemType {
-			continue
-		}
-		if search != "" {
-			lower := strings.ToLower(search)
-			if !strings.Contains(strings.ToLower(item.Title), lower) &&
-				!strings.Contains(strings.ToLower(item.Content), lower) {
-				continue
-			}
-		}
-		if tag != "" {
-			found := false
-			for _, t := range item.Tags {
-				if t == tag {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
-		}
-		result = append(result, item)
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].CreatedAt.After(result[j].CreatedAt)
-	})
-
-	return result, nil
-}
-
-func (s *Store) GetKnowledge(id string) (*models.KnowledgeItem, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var items []models.KnowledgeItem
-	s.readJSON(s.knowledgePath(), &items)
-
-	for _, item := range items {
-		if item.ID == id {
-			return &item, nil
-		}
-	}
-	return nil, fmt.Errorf("知识片段不存在: %s", id)
-}
-
-func (s *Store) SaveKnowledge(item models.KnowledgeItem) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var items []models.KnowledgeItem
-	s.readJSON(s.knowledgePath(), &items)
-
-	now := time.Now()
-	for i, existing := range items {
-		if existing.ID == item.ID {
-			item.CreatedAt = existing.CreatedAt
-			item.UpdatedAt = now
-			items[i] = item
-			return s.writeJSON(s.knowledgePath(), items)
-		}
-	}
-
-	item.CreatedAt = now
-	item.UpdatedAt = now
-	items = append(items, item)
-	return s.writeJSON(s.knowledgePath(), items)
-}
-
-func (s *Store) DeleteKnowledge(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var items []models.KnowledgeItem
-	s.readJSON(s.knowledgePath(), &items)
-
-	for i, item := range items {
-		if item.ID == id {
-			items = append(items[:i], items[i+1:]...)
-			return s.writeJSON(s.knowledgePath(), items)
-		}
-	}
-	return fmt.Errorf("知识片段不存在: %s", id)
-}
-
-func (s *Store) SaveAllReminders(reminders []models.ReminderTask) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.writeJSON(s.remindersPath(), reminders)
-}
-
-// Extended settings with SMTP and reminders
 
 func (s *Store) GetFullSettings() (*models.FullSettings, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.ensureSettingsRow()
 
-	var settings models.FullSettings
-	if err := s.readJSON(s.settingsPath(), &settings); err != nil {
+	var fs models.FullSettings
+	err := s.db.QueryRow(
+		`SELECT ai_provider, ai_base_url, ai_api_key, ai_model,
+		        smtp_host, smtp_port, smtp_username, smtp_password
+		 FROM settings WHERE id = 1`,
+	).Scan(&fs.AI.Provider, &fs.AI.BaseURL, &fs.AI.APIKey, &fs.AI.Model,
+		&fs.SMTP.Host, &fs.SMTP.Port, &fs.SMTP.Username, &fs.SMTP.Password)
+	if err != nil {
 		return nil, err
 	}
-	if settings.AI.Provider == "" {
-		settings.AI = models.AISettings{
+
+	// Apply defaults
+	if fs.AI.Provider == "" {
+		fs.AI = models.AISettings{
 			Provider: "deepseek",
 			BaseURL:  "https://api.deepseek.com",
 			Model:    "deepseek-chat",
 		}
 	}
-	return &settings, nil
+
+	// Read reminders from the reminders table (single source of truth)
+	reminders, err := s.ListReminders()
+	if err != nil {
+		return nil, err
+	}
+	fs.Reminders = reminders
+
+	return &fs, nil
 }
 
 func (s *Store) SaveFullSettings(settings *models.FullSettings) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.writeJSON(s.settingsPath(), settings)
+	s.ensureSettingsRow()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
+		`UPDATE settings SET
+			ai_provider=?, ai_base_url=?, ai_api_key=?, ai_model=?,
+			smtp_host=?, smtp_port=?, smtp_username=?, smtp_password=?
+		 WHERE id=1`,
+		settings.AI.Provider, settings.AI.BaseURL, settings.AI.APIKey, settings.AI.Model,
+		settings.SMTP.Host, settings.SMTP.Port, settings.SMTP.Username, settings.SMTP.Password,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Sync reminders from FullSettings into the reminders table
+	if settings.Reminders != nil {
+		for _, r := range settings.Reminders {
+			ca := r.CreatedAt
+			if ca.IsZero() {
+				ca = time.Now()
+			}
+			_, err := tx.Exec(
+				`INSERT OR REPLACE INTO reminders (id, name, enabled, schedule_type, time, weekday, message, created_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				r.ID, r.Name, boolToInt(r.Enabled), r.ScheduleType, r.Time, r.Weekday, r.Message, formatTime(ca),
+			)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return tx.Commit()
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// ============ Users ============
+
+func (s *Store) SaveUser(u models.User) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO users (email, password_hash, created_at) VALUES (?, ?, ?)`,
+		u.Email, u.PasswordHash, formatTime(u.CreatedAt),
+	)
+	return err
+}
+
+func (s *Store) GetUser(email string) (*models.User, error) {
+	var u models.User
+	var ca string
+	err := s.db.QueryRow(
+		`SELECT email, password_hash, created_at FROM users WHERE email = ?`, email,
+	).Scan(&u.Email, &u.PasswordHash, &ca)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("用户不存在: %s", email)
+	}
+	if err != nil {
+		return nil, err
+	}
+	u.CreatedAt, _ = parseTime(ca)
+	return &u, nil
+}
+
+// ============ Reminders ============
+
+func (s *Store) ListReminders() ([]models.ReminderTask, error) {
+	rows, err := s.db.Query(
+		`SELECT id, name, enabled, schedule_type, time, weekday, message, created_at FROM reminders`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]models.ReminderTask, 0)
+	for rows.Next() {
+		var r models.ReminderTask
+		var enabled int
+		var ca string
+		if err := rows.Scan(&r.ID, &r.Name, &enabled, &r.ScheduleType, &r.Time, &r.Weekday, &r.Message, &ca); err != nil {
+			return nil, err
+		}
+		r.Enabled = enabled != 0
+		r.CreatedAt, _ = parseTime(ca)
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) SaveReminder(r models.ReminderTask) error {
+	ca := r.CreatedAt
+	if ca.IsZero() {
+		ca = time.Now()
+	}
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO reminders (id, name, enabled, schedule_type, time, weekday, message, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.ID, r.Name, boolToInt(r.Enabled), r.ScheduleType, r.Time, r.Weekday, r.Message, formatTime(ca),
+	)
+	return err
+}
+
+func (s *Store) DeleteReminder(id string) error {
+	result, err := s.db.Exec(`DELETE FROM reminders WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("提醒不存在: %s", id)
+	}
+	return nil
+}
+
+func (s *Store) SaveAllReminders(reminders []models.ReminderTask) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM reminders`); err != nil {
+		return err
+	}
+	for _, r := range reminders {
+		ca := r.CreatedAt
+		if ca.IsZero() {
+			ca = time.Now()
+		}
+		_, err := tx.Exec(
+			`INSERT INTO reminders (id, name, enabled, schedule_type, time, weekday, message, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			r.ID, r.Name, boolToInt(r.Enabled), r.ScheduleType, r.Time, r.Weekday, r.Message, formatTime(ca),
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ============ Tasks ============
+
+func (s *Store) ListTasks(status, category, priority string) ([]models.Task, error) {
+	q := "SELECT id, title, description, status, priority, category, due_date, created_at, updated_at FROM tasks WHERE 1=1"
+	args := []interface{}{}
+	if status != "" {
+		q += " AND status = ?"
+		args = append(args, status)
+	}
+	if category != "" {
+		q += " AND category = ?"
+		args = append(args, category)
+	}
+	if priority != "" {
+		q += " AND priority = ?"
+		args = append(args, priority)
+	}
+	q += " ORDER BY created_at DESC"
+
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]models.Task, 0)
+	for rows.Next() {
+		var t models.Task
+		var ca, ua string
+		if err := rows.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.Category, &t.DueDate, &ca, &ua); err != nil {
+			return nil, err
+		}
+		t.CreatedAt, _ = parseTime(ca)
+		t.UpdatedAt, _ = parseTime(ua)
+		result = append(result, t)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) GetTask(id string) (*models.Task, error) {
+	var t models.Task
+	var ca, ua string
+	err := s.db.QueryRow(
+		`SELECT id, title, description, status, priority, category, due_date, created_at, updated_at
+		 FROM tasks WHERE id = ?`, id,
+	).Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.Category, &t.DueDate, &ca, &ua)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("任务不存在: %s", id)
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.CreatedAt, _ = parseTime(ca)
+	t.UpdatedAt, _ = parseTime(ua)
+	return &t, nil
+}
+
+func (s *Store) SaveTask(t models.Task) error {
+	now := time.Now()
+	existing, err := s.GetTask(t.ID)
+	if err == nil {
+		t.CreatedAt = existing.CreatedAt
+	} else {
+		t.CreatedAt = now
+	}
+	t.UpdatedAt = now
+
+	_, err = s.db.Exec(
+		`INSERT OR REPLACE INTO tasks (id, title, description, status, priority, category, due_date, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.Title, t.Description, t.Status, t.Priority, t.Category, t.DueDate,
+		formatTime(t.CreatedAt), formatTime(t.UpdatedAt),
+	)
+	return err
+}
+
+func (s *Store) DeleteTask(id string) error {
+	result, err := s.db.Exec(`DELETE FROM tasks WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("任务不存在: %s", id)
+	}
+	return nil
+}
+
+// ============ Knowledge ============
+
+func (s *Store) ListKnowledge(search, itemType, tag string) ([]models.KnowledgeItem, error) {
+	q := "SELECT id, title, type, content, source_url, tags, created_at, updated_at FROM knowledge_items WHERE 1=1"
+	args := []interface{}{}
+	if itemType != "" {
+		q += " AND type = ?"
+		args = append(args, itemType)
+	}
+	if search != "" {
+		q += " AND (title LIKE ? OR content LIKE ?)"
+		like := "%" + search + "%"
+		args = append(args, like, like)
+	}
+	if tag != "" {
+		// tag stored as JSON: ["tag1","tag2"] — match with quotes for precision
+		q += " AND tags LIKE ?"
+		args = append(args, "%\""+tag+"\"%")
+	}
+	q += " ORDER BY created_at DESC"
+
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]models.KnowledgeItem, 0)
+	for rows.Next() {
+		var item models.KnowledgeItem
+		var tagsStr, ca, ua string
+		if err := rows.Scan(&item.ID, &item.Title, &item.Type, &item.Content, &item.SourceURL, &tagsStr, &ca, &ua); err != nil {
+			return nil, err
+		}
+		item.Tags = unmarshalTags(tagsStr)
+		item.CreatedAt, _ = parseTime(ca)
+		item.UpdatedAt, _ = parseTime(ua)
+		result = append(result, item)
+	}
+
+	// For search filtering, we already did SQL LIKE which is case-insensitive for ASCII,
+	// but the original code used strings.ToLower. SQLite LIKE is case-insensitive for ASCII
+	// by default, so this matches the original behavior.
+	return result, rows.Err()
+}
+
+func (s *Store) GetKnowledge(id string) (*models.KnowledgeItem, error) {
+	var item models.KnowledgeItem
+	var tagsStr, ca, ua string
+	err := s.db.QueryRow(
+		`SELECT id, title, type, content, source_url, tags, created_at, updated_at
+		 FROM knowledge_items WHERE id = ?`, id,
+	).Scan(&item.ID, &item.Title, &item.Type, &item.Content, &item.SourceURL, &tagsStr, &ca, &ua)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("知识片段不存在: %s", id)
+	}
+	if err != nil {
+		return nil, err
+	}
+	item.Tags = unmarshalTags(tagsStr)
+	item.CreatedAt, _ = parseTime(ca)
+	item.UpdatedAt, _ = parseTime(ua)
+	return &item, nil
+}
+
+func (s *Store) SaveKnowledge(item models.KnowledgeItem) error {
+	now := time.Now()
+	existing, err := s.GetKnowledge(item.ID)
+	if err == nil {
+		item.CreatedAt = existing.CreatedAt
+	} else {
+		item.CreatedAt = now
+	}
+	item.UpdatedAt = now
+
+	if item.Tags == nil {
+		item.Tags = []string{}
+	}
+
+	_, err = s.db.Exec(
+		`INSERT OR REPLACE INTO knowledge_items (id, title, type, content, source_url, tags, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		item.ID, item.Title, item.Type, item.Content, item.SourceURL,
+		marshalTags(item.Tags),
+		formatTime(item.CreatedAt), formatTime(item.UpdatedAt),
+	)
+	return err
+}
+
+func (s *Store) DeleteKnowledge(id string) error {
+	result, err := s.db.Exec(`DELETE FROM knowledge_items WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("知识片段不存在: %s", id)
+	}
+	return nil
+}
+
+// ============ Templates ============
+
+func (s *Store) ListTemplates() ([]models.Template, error) {
+	rows, err := s.db.Query(
+		`SELECT id, name, fields, created_at, updated_at FROM templates ORDER BY created_at ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]models.Template, 0)
+	for rows.Next() {
+		var t models.Template
+		var fieldsStr, ca, ua string
+		if err := rows.Scan(&t.ID, &t.Name, &fieldsStr, &ca, &ua); err != nil {
+			return nil, err
+		}
+		t.Fields = unmarshalTags(fieldsStr)
+		t.CreatedAt, _ = parseTime(ca)
+		t.UpdatedAt, _ = parseTime(ua)
+		result = append(result, t)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) GetTemplate(id string) (*models.Template, error) {
+	var t models.Template
+	var fieldsStr, ca, ua string
+	err := s.db.QueryRow(
+		`SELECT id, name, fields, created_at, updated_at FROM templates WHERE id = ?`, id,
+	).Scan(&t.ID, &t.Name, &fieldsStr, &ca, &ua)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("模板不存在: %s", id)
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.Fields = unmarshalTags(fieldsStr)
+	t.CreatedAt, _ = parseTime(ca)
+	t.UpdatedAt, _ = parseTime(ua)
+	return &t, nil
+}
+
+func (s *Store) SaveTemplate(t models.Template) error {
+	now := time.Now()
+	existing, err := s.GetTemplate(t.ID)
+	if err == nil {
+		t.CreatedAt = existing.CreatedAt
+	} else {
+		t.CreatedAt = now
+	}
+	t.UpdatedAt = now
+
+	if t.Fields == nil {
+		t.Fields = []string{}
+	}
+
+	_, err = s.db.Exec(
+		`INSERT OR REPLACE INTO templates (id, name, fields, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		t.ID, t.Name, marshalTags(t.Fields), formatTime(t.CreatedAt), formatTime(t.UpdatedAt),
+	)
+	return err
+}
+
+func (s *Store) DeleteTemplate(id string) error {
+	result, err := s.db.Exec(`DELETE FROM templates WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("模板不存在: %s", id)
+	}
+	return nil
 }

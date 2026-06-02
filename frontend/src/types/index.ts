@@ -100,3 +100,11 @@ export interface KnowledgeReq {
   source_url: string
   tags: string[]
 }
+
+export interface Template {
+  id: string
+  name: string
+  fields: string[]
+  created_at: string
+  updated_at: string
+}

@@ -39,6 +39,12 @@ func (h *DailyReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			http.Error(w, `{"error":"date required"}`, http.StatusBadRequest)
 		}
+	case http.MethodDelete:
+		if path != "" {
+			h.delete(w, r, path)
+		} else {
+			http.Error(w, `{"error":"date required"}`, http.StatusBadRequest)
+		}
 	case http.MethodOptions:
 		w.WriteHeader(http.StatusOK)
 	default:
@@ -89,6 +95,14 @@ func (h *DailyReportHandler) update(w http.ResponseWriter, r *http.Request, date
 	}
 	saved, _ := h.store.GetDailyReport(date)
 	writeJSON(w, http.StatusOK, saved)
+}
+
+func (h *DailyReportHandler) delete(w http.ResponseWriter, r *http.Request, date string) {
+	if err := h.store.DeleteDailyReport(date); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (h *DailyReportHandler) list(w http.ResponseWriter, r *http.Request) {

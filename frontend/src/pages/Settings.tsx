@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Save, Loader2, Eye, EyeOff, Server, Mail, Bell, Plus, Pencil, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { api } from '../lib/api'
 import ReminderForm from '../components/ReminderForm'
+import { useToast } from '../components/Toast'
 import type { FullSettings, ReminderTask } from '../types'
 
 const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
@@ -19,6 +20,7 @@ export default function SettingsPage() {
   const [showSMTPPass, setShowSMTPPass] = useState(false)
   const [reminderForm, setReminderForm] = useState<ReminderTask | null>(null)
   const [showReminderForm, setShowReminderForm] = useState(false)
+  const toast = useToast()
 
   useEffect(() => {
     api.getSettings()
@@ -34,7 +36,7 @@ export default function SettingsPage() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {
-      alert('保存失败')
+      toast.error('保存失败')
     } finally {
       setSaving(false)
     }
@@ -49,7 +51,7 @@ export default function SettingsPage() {
       setShowReminderForm(false)
       setReminderForm(null)
     } catch (err: any) {
-      alert(err.message || '创建失败')
+      toast.error(err.message || '创建失败')
     }
   }
 
@@ -62,17 +64,18 @@ export default function SettingsPage() {
       setShowReminderForm(false)
       setReminderForm(null)
     } catch (err: any) {
-      alert(err.message || '更新失败')
+      toast.error(err.message || '更新失败')
     }
   }
 
   const handleDeleteReminder = async (id: string) => {
-    if (!confirm('确定要删除这个提醒吗？')) return
+    const ok = await toast.confirm('确定要删除这个提醒吗？')
+    if (!ok) return
     try {
       await api.deleteReminder(id)
       setSettings((s) => ({ ...s, reminders: s.reminders.filter((r) => r.id !== id) }))
     } catch {
-      alert('删除失败')
+      toast.error('删除失败')
     }
   }
 
@@ -84,7 +87,7 @@ export default function SettingsPage() {
         reminders: s.reminders.map((r) => (r.id === task.id ? { ...r, enabled: !r.enabled } : r)),
       }))
     } catch {
-      alert('操作失败')
+      toast.error('操作失败')
     }
   }
 

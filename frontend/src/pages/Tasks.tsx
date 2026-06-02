@@ -3,6 +3,7 @@ import { Plus, Trash2, Clock } from 'lucide-react'
 import { api } from '../lib/api'
 import MarkdownEditor from '../components/MarkdownEditor'
 import MarkdownPreview from '../components/MarkdownPreview'
+import { useToast } from '../components/Toast'
 import type { Task } from '../types'
 
 const STATUSES = [
@@ -56,6 +57,7 @@ export default function TasksPage() {
   const [editing, setEditing] = useState<Task | null>(null)
   const [form, setForm] = useState<FormData>(emptyForm)
   const [previewId, setPreviewId] = useState<string | null>(null)
+  const toast = useToast()
 
   useEffect(() => { loadTasks() }, [])
 
@@ -104,7 +106,8 @@ export default function TasksPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('确定删除该任务？')) return
+    const ok = await toast.confirm('确定删除该任务？')
+    if (!ok) return
     await api.deleteTask(id)
     loadTasks()
   }

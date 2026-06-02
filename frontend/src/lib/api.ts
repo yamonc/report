@@ -1,4 +1,4 @@
-import type { DailyReport, FullSettings, LoginResp, ReminderTask, WeeklyReport, Task, KnowledgeItem } from '../types'
+import type { DailyReport, FullSettings, LoginResp, ReminderTask, WeeklyReport, Task, KnowledgeItem, Template } from '../types'
 
 const BASE = '/api/v1'
 
@@ -43,6 +43,11 @@ export const api = {
     return request<DailyReport>(`/daily-reports/${date}`, {
       method: 'PUT',
       body: JSON.stringify({ date, content }),
+    })
+  },
+  deleteDailyReport(date: string) {
+    return request<{ status: string }>(`/daily-reports/${date}`, {
+      method: 'DELETE',
     })
   },
   listDailyReports(from?: string, to?: string) {
@@ -169,6 +174,28 @@ export const api = {
   },
   deleteKnowledge(id: string) {
     return request<{ status: string }>(`/knowledge/${id}`, {
+      method: 'DELETE',
+    })
+  },
+
+  // Templates
+  listTemplates() {
+    return request<Template[]>('/templates')
+  },
+  createTemplate(data: { name: string; fields: string[] }) {
+    return request<Template>('/templates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+  updateTemplate(id: string, data: { name?: string; fields?: string[] }) {
+    return request<Template>(`/templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+  deleteTemplate(id: string) {
+    return request<{ status: string }>(`/templates/${id}`, {
       method: 'DELETE',
     })
   },

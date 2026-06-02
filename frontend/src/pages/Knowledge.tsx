@@ -3,6 +3,7 @@ import { Plus, Search, Trash2, Link, Code, FileText, Tag } from 'lucide-react'
 import { api } from '../lib/api'
 import MarkdownEditor from '../components/MarkdownEditor'
 import MarkdownPreview from '../components/MarkdownPreview'
+import { useToast } from '../components/Toast'
 import type { KnowledgeItem } from '../types'
 
 const TYPES = [
@@ -29,6 +30,7 @@ const emptyForm: FormData = {
 
 export default function KnowledgePage() {
   const [items, setItems] = useState<KnowledgeItem[]>([])
+  const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<KnowledgeItem | null>(null)
@@ -105,7 +107,8 @@ export default function KnowledgePage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('确定删除该知识片段？')) return
+    const ok = await toast.confirm('确定删除该知识片段？')
+    if (!ok) return
     await api.deleteKnowledge(id)
     loadItems()
   }

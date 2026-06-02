@@ -30,8 +30,8 @@ docker-compose.override.yml
 
 # Sensitive data
 .claude/settings.local.json
-backend/data/*.json
-frontend/data/*.json
+backend/data/
+frontend/data/
 
 # Temp files
 *.exe~

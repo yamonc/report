@@ -4,6 +4,7 @@ import MarkdownEditor from '../components/MarkdownEditor'
 import MarkdownPreview from '../components/MarkdownPreview'
 import { api } from '../lib/api'
 import { getWeekStart, getWeekEnd, getWeekLabel } from '../lib/utils'
+import { useToast } from '../components/Toast'
 import type { WeeklyReport as WeeklyReportType } from '../types'
 
 export default function WeeklyReportPage() {
@@ -15,6 +16,7 @@ export default function WeeklyReportPage() {
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [history, setHistory] = useState<WeeklyReportType[]>([])
+  const toast = useToast()
 
   const reportId = `${weekStart}_${weekEnd}`
 
@@ -55,7 +57,7 @@ export default function WeeklyReportPage() {
       setContent(r.content)
       loadHistory()
     } catch (err: any) {
-      alert(err.message || '生成失败')
+      toast.error(err.message || '生成失败')
     } finally {
       setGenerating(false)
     }
@@ -70,7 +72,7 @@ export default function WeeklyReportPage() {
       setEditing(false)
       loadHistory()
     } catch {
-      alert('保存失败')
+      toast.error('保存失败')
     } finally {
       setSaving(false)
     }
@@ -88,7 +90,7 @@ export default function WeeklyReportPage() {
       setEditing(false)
       loadHistory()
     } catch {
-      alert('确认失败')
+      toast.error('确认失败')
     } finally {
       setSaving(false)
     }

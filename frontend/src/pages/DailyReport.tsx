@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Save, Loader2, Eye, Edit3 } from 'lucide-react'
+import { Save, Loader2, Eye, Edit3, Trash2, LayoutTemplate } from 'lucide-react'
 import Calendar from '../components/Calendar'
 import MarkdownEditor from '../components/MarkdownEditor'
 import MarkdownPreview from '../components/MarkdownPreview'
+import TemplateManager from '../components/TemplateManager'
 import { api } from '../lib/api'
 import { getToday, formatDate } from '../lib/utils'
+import { useToast } from '../components/Toast'
+import type { Template } from '../types'
 
 export default function DailyReportPage() {
   const { date: paramDate } = useParams<{ date?: string }>()
@@ -15,8 +18,13 @@ export default function DailyReportPage() {
   const [content, setContent] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [preview, setPreview] = useState(false)
   const [datesWithReports, setDatesWithReports] = useState<Set<string>>(new Set())
+  const [showTemplateManager, setShowTemplateManager] = useState(false)
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const toast = useToast()
 
   const d = new Date(date)
   const [viewYear, setViewYear] = useState(d.getFullYear())
@@ -36,6 +44,11 @@ export default function DailyReportPage() {
   useEffect(() => {
     api.getDailyReport(date).then(r => setContent(r.content)).catch(() => setContent(''))
   }, [date])
+
+  // Load templates for the quick-dropdown
+  useEffect(() => {
+    api.listTemplates().then(data => setTemplates(data || [])).catch(() => {})
+  }, [showTemplateManager])
 
   const fetchMonthReports = useCallback(() => {
     const m = String(viewMonth).padStart(2, '0')
@@ -81,13 +94,38 @@ export default function DailyReportPage() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {
-      alert('保存失败')
+      toast.error('保存失败')
     } finally {
       setSaving(false)
     }
   }
 
+  const handleReset = async () => {
+    if (!content || content.trim() === '') return
+    const ok = await toast.confirm('确定要清空当天的日报内容吗？此操作不可撤销。')
+    if (!ok) return
+    setResetting(true)
+    try {
+      await api.deleteDailyReport(date)
+      setContent('')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {
+      toast.error('清空失败')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const handleInsertTemplate = (t: Template) => {
+    const inserted = t.fields.map(f => `## ${f}\n\n`).join('')
+    setContent(prev => prev ? prev + '\n\n' + inserted : inserted)
+    setActiveTemplateId(t.id)
+  }
+
   const goToToday = () => navigate('/daily')
+
+  const activeName = templates.find(t => t.id === activeTemplateId)?.name
 
   return (
     <div className="space-y-6">
@@ -122,6 +160,16 @@ export default function DailyReportPage() {
             {preview ? '编辑' : '预览'}
           </button>
           <button
+            onClick={handleReset}
+            disabled={resetting || !content}
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            type="button"
+            title="清空当天日报内容"
+          >
+            {resetting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            清空
+          </button>
+          <button
             onClick={handleSave}
             disabled={saving}
             className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-[#1a1a16] transition-all hover:bg-accent-soft disabled:opacity-40 disabled:cursor-not-allowed"
@@ -144,6 +192,24 @@ export default function DailyReportPage() {
         onNextMonth={handleNextMonth}
       />
 
+      {/* Template bar */}
+      <div className="animate-fade-up stagger-2 flex items-center gap-3">
+        <button
+          onClick={() => setShowTemplateManager(true)}
+          className="inline-flex items-center gap-2 rounded-lg border border-dashed border-border bg-bg-elevated px-4 py-2.5 text-sm font-medium text-text-secondary hover:text-accent hover:border-accent/30 transition-all duration-200"
+          type="button"
+        >
+          <LayoutTemplate className="h-4 w-4" />
+          {activeTemplateId && activeName ? activeName : '选择模板...'}
+        </button>
+
+        {activeTemplateId && (
+          <span className="text-xs text-text-tertiary">
+            模板已插入，可直接编辑每个区域
+          </span>
+        )}
+      </div>
+
       {/* Editor / Preview */}
       <div className="animate-fade-up stagger-3">
         {preview ? (
@@ -152,6 +218,15 @@ export default function DailyReportPage() {
           <MarkdownEditor value={content} onChange={setContent} />
         )}
       </div>
+
+      {/* Template Manager Modal */}
+      {showTemplateManager && (
+        <TemplateManager
+          onClose={() => setShowTemplateManager(false)}
+          onInsert={handleInsertTemplate}
+          showInsert
+        />
+      )}
     </div>
   )
 }
