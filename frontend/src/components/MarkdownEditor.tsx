@@ -73,7 +73,7 @@ export default function MarkdownEditor({ value, onChange, placeholder, minHeight
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder || '开始写日报...'}
         className="w-full resize-none bg-transparent px-4 py-3.5 text-sm leading-relaxed text-text-primary outline-none placeholder:text-text-tertiary/50"
-        style={{ minHeight, fontFamily: "var(--font-mono)" }}
+        style={{ minHeight }}
       />
     </div>
   )

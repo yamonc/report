@@ -142,7 +142,7 @@ export default function TemplateManager({ onClose, onInsert, showInsert }: Templ
                   onChange={e => setFieldsText(e.target.value)}
                   placeholder={"今日完成\n明日计划\n遇到的问题"}
                   rows={6}
-                  className="w-full rounded-xl border border-border bg-bg-root px-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary/50 focus:border-border-focus transition-all resize-none font-mono"
+                  className="w-full rounded-xl border border-border bg-bg-root px-4 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary/50 focus:border-border-focus transition-all resize-none"
                 />
                 <p className="mt-1 text-xs text-text-tertiary">
                   每个字段将作为 Markdown 二级标题（## 字段名）插入到编辑器中
@@ -188,7 +188,7 @@ export default function TemplateManager({ onClose, onInsert, showInsert }: Templ
                         <p className="text-xs text-text-tertiary mt-0.5 flex flex-wrap gap-1">
                           {t.fields.map((f, i) => (
                             <span key={f}>
-                              <code className="text-[10px] bg-bg-hover px-1.5 py-0.5 rounded font-mono">{f}</code>
+                              <code className="text-[10px] bg-bg-hover px-1.5 py-0.5 rounded font-sans">{f}</code>
                               {i < t.fields.length - 1 && ' · '}
                             </span>
                           ))}

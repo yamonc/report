@@ -52,7 +52,7 @@ export default {
       fontFamily: {
         serif: ['"Noto Serif SC"', '"Source Han Serif SC"', '"STSong"', '"SimSun"', '"Songti SC"', "serif"],
         sans: ['"Noto Sans SC"', '"Source Han Sans SC"', '"PingFang SC"', '"Microsoft YaHei"', '"Hiragino Sans GB"', "sans-serif"],
-        mono: ['"JetBrains Mono"', '"Cascadia Code"', '"Fira Code"', '"SF Mono"', '"Menlo"', "monospace"],
+        mono: ['"JetBrains Mono"', '"Cascadia Code"', '"Fira Code"', '"SF Mono"', '"Menlo"', '"Noto Sans SC"', '"Microsoft YaHei"', "monospace"],
       },
       borderRadius: {
         sm: "var(--radius-sm)",

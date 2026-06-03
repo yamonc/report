@@ -37,18 +37,18 @@ func (h *DailyReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if path != "" {
 			h.update(w, r, path)
 		} else {
-			http.Error(w, `{"error":"date required"}`, http.StatusBadRequest)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "date required"})
 		}
 	case http.MethodDelete:
 		if path != "" {
 			h.delete(w, r, path)
 		} else {
-			http.Error(w, `{"error":"date required"}`, http.StatusBadRequest)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "date required"})
 		}
 	case http.MethodOptions:
 		w.WriteHeader(http.StatusOK)
 	default:
-		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
 }
 

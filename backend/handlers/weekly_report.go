@@ -30,7 +30,7 @@ func (h *WeeklyReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if path == "generate" {
 			h.generate(w, r)
 		} else {
-			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		}
 	case http.MethodGet:
 		if path == "" {
@@ -42,12 +42,12 @@ func (h *WeeklyReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		if path != "" {
 			h.update(w, r, path)
 		} else {
-			http.Error(w, `{"error":"id required"}`, http.StatusBadRequest)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
 		}
 	case http.MethodOptions:
 		w.WriteHeader(http.StatusOK)
 	default:
-		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 	}
 }
 
