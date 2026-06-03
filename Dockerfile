@@ -1,5 +1,5 @@
 # Stage 1: Build Go backend
-FROM golang:1.21-alpine AS go-builder
+FROM golang:1.25-alpine AS go-builder
 ENV GOPROXY=https://goproxy.cn,direct
 WORKDIR /app
 COPY backend/ ./
