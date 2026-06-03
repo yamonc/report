@@ -77,10 +77,6 @@ export default function Calendar({
     }
   }
 
-  // Choose month color: current month accent, else neutral
-  const currentMonth = new Date().getMonth() + 1
-  const currentYear = new Date().getFullYear()
-  const isCurrentMonth = year === currentYear && month === currentMonth
 
   return (
     <div className="select-none animate-fade-up stagger-2">
