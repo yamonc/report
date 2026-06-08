@@ -153,3 +153,74 @@ func (s *AIService) callDeepSeek(systemPrompt, userPrompt string) (string, error
 
 	return chatResp.Choices[0].Message.Content, nil
 }
+
+// SearchQuickNotes uses AI to find relevant notes for a query.
+func (s *AIService) SearchQuickNotes(query string, notes []models.QuickNote) ([]models.SearchResultItem, error) {
+	if len(notes) == 0 {
+		return []models.SearchResultItem{}, nil
+	}
+
+	var listBuilder strings.Builder
+	for _, n := range notes {
+		contentPreview := n.Content
+		// Truncate content as UTF-8 safely
+		runes := []rune(contentPreview)
+		if len(runes) > 200 {
+			contentPreview = string(runes[:200]) + "..."
+		}
+		listBuilder.WriteString(fmt.Sprintf("- [%s] %s\n", n.ID, contentPreview))
+	}
+
+	systemPrompt := `你是一个知识检索助手。根据用户查询，从候选小记列表中找出最相关的条目。
+返回 JSON 数组（严格按照格式），只包含 score >= 4 的条目（score 1-10）：
+[{"id": "note_id", "score": 8, "match_reason": "简短的匹配原因"}]
+按 score 降序排列，不超过 10 条。如果没有相关条目返回空数组 []。`
+
+	userPrompt := fmt.Sprintf(`查询：%s
+
+候选小记列表：
+%s
+
+请返回 JSON：`, query, listBuilder.String())
+
+	aiContent, err := s.callDeepSeek(systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("AI 搜索失败: %w", err)
+	}
+
+	// Parse AI response - find JSON array in the response
+	results, err := parseSearchResults(aiContent)
+	if err != nil {
+		return nil, fmt.Errorf("解析搜索结果失败: %w", err)
+	}
+
+	// Enrich results with note content and tags
+	for i := range results {
+		for _, n := range notes {
+			if n.ID == results[i].ID {
+				results[i].Content = n.Content
+				results[i].Tags = n.Tags
+				results[i].CreatedAt = n.CreatedAt
+				break
+			}
+		}
+	}
+
+	return results, nil
+}
+
+func parseSearchResults(raw string) ([]models.SearchResultItem, error) {
+	// Try to find JSON array between [ and ] — handle extra text from LLM
+	raw = strings.TrimSpace(raw)
+	start := strings.Index(raw, "[")
+	end := strings.LastIndex(raw, "]")
+	if start == -1 || end == -1 {
+		return []models.SearchResultItem{}, nil
+	}
+
+	var items []models.SearchResultItem
+	if err := json.Unmarshal([]byte(raw[start:end+1]), &items); err != nil {
+		return []models.SearchResultItem{}, nil
+	}
+	return items, nil
+}
