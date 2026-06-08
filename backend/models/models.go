@@ -147,6 +147,50 @@ type TemplateReq struct {
 	Fields []string `json:"fields"`
 }
 
+// ============ Quick Notes ============
+
+type QuickNote struct {
+	ID         string    `json:"id"`
+	Content    string    `json:"content"`
+	Tags       []string  `json:"tags"`
+	Source     string    `json:"source"`
+	Status     string    `json:"status"`
+	ArchivedTo string    `json:"archived_to"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type CreateQuickNoteReq struct {
+	Content string   `json:"content"`
+	Tags    []string `json:"tags"`
+	Source  string   `json:"source"`
+}
+
+type UpdateQuickNoteReq struct {
+	Content *string   `json:"content,omitempty"`
+	Tags    *[]string `json:"tags,omitempty"`
+	Source  *string   `json:"source,omitempty"`
+}
+
+type SearchQuickNotesReq struct {
+	Query string `json:"query"`
+}
+
+type SearchResultItem struct {
+	ID          string   `json:"id"`
+	Content     string   `json:"content"`
+	Tags        []string `json:"tags"`
+	Score       int      `json:"score"`
+	MatchReason string   `json:"match_reason"`
+	CreatedAt   string   `json:"created_at"`
+}
+
+type ArchiveQuickNoteReq struct {
+	Title string   `json:"title"`
+	Type  string   `json:"type"`
+	Tags  []string `json:"tags"`
+}
+
 func DefaultReminders() []ReminderTask {
 	now := time.Now()
 	return []ReminderTask{
