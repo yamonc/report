@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Trash2, Link, Code, FileText, Tag, Archive, Sparkles, Loader2, PenSquare } from 'lucide-react'
+import { Plus, Search, Trash2, Link, Code, FileText, Tag, Sparkles, Loader2, PenSquare } from 'lucide-react'
 import { api } from '../lib/api'
 import MarkdownEditor from '../components/MarkdownEditor'
 import MarkdownPreview from '../components/MarkdownPreview'
