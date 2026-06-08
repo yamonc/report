@@ -220,7 +220,7 @@ func parseSearchResults(raw string) ([]models.SearchResultItem, error) {
 
 	var items []models.SearchResultItem
 	if err := json.Unmarshal([]byte(raw[start:end+1]), &items); err != nil {
-		return []models.SearchResultItem{}, nil
+		return nil, fmt.Errorf("AI 返回的搜索结果格式无效: %w", err)
 	}
 	return items, nil
 }
