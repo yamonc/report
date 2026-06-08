@@ -108,7 +108,7 @@ func (h *SettingsHandler) testEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.emailSvc.SendTestEmail(smtpCfg); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "发送失败: " + err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": services.DiagnoseSMTPError(err)})
 		return
 	}
 
