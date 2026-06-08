@@ -1,4 +1,4 @@
-import type { DailyReport, FullSettings, LoginResp, ReminderTask, WeeklyReport, Task, KnowledgeItem, Template } from '../types'
+import type { DailyReport, FullSettings, LoginResp, ReminderTask, WeeklyReport, Task, KnowledgeItem, Template, QuickNote, QuickNoteReq, SearchResultItem, ArchiveReq } from '../types'
 
 const BASE = '/api/v1'
 
@@ -204,6 +204,43 @@ export const api = {
   deleteTemplate(id: string) {
     return request<{ status: string }>(`/templates/${id}`, {
       method: 'DELETE',
+    })
+  },
+
+  // Quick Notes
+  listQuickNotes(status?: string) {
+    const params = new URLSearchParams()
+    if (status) params.set('status', status)
+    const qs = params.toString()
+    return request<QuickNote[]>(`/quick-notes${qs ? `?${qs}` : ''}`)
+  },
+  createQuickNote(data: QuickNoteReq) {
+    return request<QuickNote>('/quick-notes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+  updateQuickNote(id: string, data: { content?: string; tags?: string[]; source?: string }) {
+    return request<QuickNote>(`/quick-notes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+  deleteQuickNote(id: string) {
+    return request<{ status: string }>(`/quick-notes/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  searchQuickNotes(query: string) {
+    return request<SearchResultItem[]>('/quick-notes/search', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    })
+  },
+  archiveQuickNote(id: string, data?: ArchiveReq) {
+    return request<{ status: string; note_id: string; knowledge_id: string }>(`/quick-notes/${id}/archive`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
     })
   },
 }

@@ -108,3 +108,35 @@ export interface Template {
   created_at: string
   updated_at: string
 }
+
+export interface QuickNote {
+  id: string
+  content: string
+  tags: string[]
+  source: string
+  status: 'active' | 'archived'
+  archived_to: string
+  created_at: string
+  updated_at: string
+}
+
+export interface QuickNoteReq {
+  content: string
+  tags?: string[]
+  source?: string
+}
+
+export interface SearchResultItem {
+  id: string
+  content: string
+  tags: string[]
+  score: number
+  match_reason: string
+  created_at: string
+}
+
+export interface ArchiveReq {
+  title?: string
+  type?: string
+  tags?: string[]
+}
