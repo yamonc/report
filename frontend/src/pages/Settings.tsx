@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Save, Loader2, Eye, EyeOff, Server, Mail, Bell, Plus, Pencil, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Save, Loader2, Eye, EyeOff, Server, Mail, Bell, Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Send } from 'lucide-react'
 import { api } from '../lib/api'
 import ReminderForm from '../components/ReminderForm'
 import { useToast } from '../components/Toast'
@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [showSMTPPass, setShowSMTPPass] = useState(false)
   const [reminderForm, setReminderForm] = useState<ReminderTask | null>(null)
   const [showReminderForm, setShowReminderForm] = useState(false)
+  const [testing, setTesting] = useState(false)
   const toast = useToast()
 
   useEffect(() => {
@@ -76,6 +77,22 @@ export default function SettingsPage() {
       setSettings((s) => ({ ...s, reminders: s.reminders.filter((r) => r.id !== id) }))
     } catch {
       toast.error('删除失败')
+    }
+  }
+
+  const handleTestEmail = async () => {
+    if (!settings.smtp.host || !settings.smtp.username) {
+      toast.error('请先填写 SMTP 服务器和发件邮箱')
+      return
+    }
+    setTesting(true)
+    try {
+      await api.testEmail()
+      toast.success('测试邮件发送成功，请检查收件箱')
+    } catch (err: any) {
+      toast.error(err.message || '发送失败')
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -257,6 +274,18 @@ export default function SettingsPage() {
                 {showSMTPPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+          </div>
+
+          <div className="pt-1">
+            <button
+              onClick={handleTestEmail}
+              disabled={testing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              type="button"
+            >
+              {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              {testing ? '发送中...' : '发送测试邮件'}
+            </button>
           </div>
         </div>
 

@@ -90,6 +90,13 @@ export const api = {
     })
   },
 
+  testEmail() {
+    return request<{ status: string; message: string }>('/settings/test-email', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  },
+
   // Reminders
   listReminders() {
     return request<ReminderTask[]>('/reminders')

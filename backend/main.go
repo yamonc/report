@@ -42,7 +42,7 @@ func main() {
 
 	dailyHandler := handlers.NewDailyReportHandler(s)
 	weeklyHandler := handlers.NewWeeklyReportHandler(s, aiSvc)
-	settingsHandler := handlers.NewSettingsHandler(s)
+	settingsHandler := handlers.NewSettingsHandler(s, emailSvc)
 	authHandler := handlers.NewAuthHandler(s, cfg.JWTSecret)
 	remindersHandler := handlers.NewRemindersHandler(s)
 	tasksHandler := handlers.NewTasksHandler(s)
@@ -70,6 +70,8 @@ func main() {
 	mux.Handle("/api/v1/weekly-reports/", weeklyHandler)
 	mux.Handle("/api/v1/settings", settingsHandler)
 	mux.Handle("/api/v1/settings/", settingsHandler)
+	mux.Handle("/api/v1/settings/test-email", settingsHandler)
+	mux.Handle("/api/v1/settings/test-email/", settingsHandler)
 	mux.Handle("/api/v1/reminders", remindersHandler)
 	mux.Handle("/api/v1/reminders/", remindersHandler)
 	mux.Handle("/api/v1/tasks", tasksHandler)

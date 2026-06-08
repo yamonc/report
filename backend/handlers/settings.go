@@ -5,19 +5,35 @@ import (
 	"net/http"
 
 	"report/backend/models"
+	"report/backend/services"
 	"report/backend/store"
 )
 
 type SettingsHandler struct {
-	store *store.Store
+	store    *store.Store
+	emailSvc *services.EmailService
 }
 
-func NewSettingsHandler(s *store.Store) *SettingsHandler {
-	return &SettingsHandler{store: s}
+func NewSettingsHandler(s *store.Store, es *services.EmailService) *SettingsHandler {
+	return &SettingsHandler{store: s, emailSvc: es}
 }
 
 func (h *SettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	// Check for /test-email sub-path
+	if r.URL.Path == "/api/v1/settings/test-email" || r.URL.Path == "/api/v1/settings/test-email/" {
+		if r.Method == http.MethodPost {
+			h.testEmail(w, r)
+			return
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -76,4 +92,25 @@ func (h *SettingsHandler) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *SettingsHandler) testEmail(w http.ResponseWriter, r *http.Request) {
+	settings, err := h.store.GetFullSettings()
+	if err != nil || settings == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "请先配置 SMTP 信息"})
+		return
+	}
+
+	smtpCfg := settings.SMTP
+	if smtpCfg.Host == "" || smtpCfg.Username == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "SMTP 服务器地址和发件邮箱不能为空"})
+		return
+	}
+
+	if err := h.emailSvc.SendTestEmail(smtpCfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "发送失败: " + err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "测试邮件已发送，请检查收件箱"})
 }
