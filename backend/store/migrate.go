@@ -83,6 +83,16 @@ func (s *Store) createTables() {
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS quick_notes (
+			id TEXT PRIMARY KEY,
+			content TEXT NOT NULL,
+			tags TEXT DEFAULT '[]',
+			source TEXT DEFAULT '',
+			status TEXT DEFAULT 'active',
+			archived_to TEXT DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
 	}
 
 	for _, stmt := range ddl {

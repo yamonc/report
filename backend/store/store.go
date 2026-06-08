@@ -713,3 +713,88 @@ func (s *Store) DeleteTemplate(id string) error {
 	}
 	return nil
 }
+
+// ============ Quick Notes ============
+
+func (s *Store) ListQuickNotes(status string) ([]models.QuickNote, error) {
+	q := "SELECT id, content, tags, source, status, archived_to, created_at, updated_at FROM quick_notes WHERE 1=1"
+	args := []interface{}{}
+	if status != "" {
+		q += " AND status = ?"
+		args = append(args, status)
+	}
+	q += " ORDER BY created_at DESC"
+
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]models.QuickNote, 0)
+	for rows.Next() {
+		var n models.QuickNote
+		var tagsStr, ca, ua string
+		if err := rows.Scan(&n.ID, &n.Content, &tagsStr, &n.Source, &n.Status, &n.ArchivedTo, &ca, &ua); err != nil {
+			return nil, err
+		}
+		n.Tags = unmarshalTags(tagsStr)
+		n.CreatedAt, _ = parseTime(ca)
+		n.UpdatedAt, _ = parseTime(ua)
+		result = append(result, n)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) GetQuickNote(id string) (*models.QuickNote, error) {
+	var n models.QuickNote
+	var tagsStr, ca, ua string
+	err := s.db.QueryRow(
+		`SELECT id, content, tags, source, status, archived_to, created_at, updated_at FROM quick_notes WHERE id = ?`, id,
+	).Scan(&n.ID, &n.Content, &tagsStr, &n.Source, &n.Status, &n.ArchivedTo, &ca, &ua)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("小记不存在: %s", id)
+	}
+	if err != nil {
+		return nil, err
+	}
+	n.Tags = unmarshalTags(tagsStr)
+	n.CreatedAt, _ = parseTime(ca)
+	n.UpdatedAt, _ = parseTime(ua)
+	return &n, nil
+}
+
+func (s *Store) SaveQuickNote(n models.QuickNote) error {
+	now := time.Now()
+	existing, err := s.GetQuickNote(n.ID)
+	if err == nil {
+		n.CreatedAt = existing.CreatedAt
+	} else {
+		n.CreatedAt = now
+	}
+	n.UpdatedAt = now
+
+	if n.Tags == nil {
+		n.Tags = []string{}
+	}
+
+	_, err = s.db.Exec(
+		`INSERT OR REPLACE INTO quick_notes (id, content, tags, source, status, archived_to, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.ID, n.Content, marshalTags(n.Tags), n.Source, n.Status, n.ArchivedTo,
+		formatTime(n.CreatedAt), formatTime(n.UpdatedAt),
+	)
+	return err
+}
+
+func (s *Store) DeleteQuickNote(id string) error {
+	result, err := s.db.Exec(`DELETE FROM quick_notes WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("小记不存在: %s", id)
+	}
+	return nil
+}
