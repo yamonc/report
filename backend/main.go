@@ -48,6 +48,7 @@ func main() {
 	tasksHandler := handlers.NewTasksHandler(s)
 	knowledgeHandler := handlers.NewKnowledgeHandler(s)
 	templatesHandler := handlers.NewTemplatesHandler(s)
+	quickNotesHandler := handlers.NewQuickNotesHandler(s, aiSvc)
 
 	mux := http.NewServeMux()
 
@@ -80,6 +81,8 @@ func main() {
 	mux.Handle("/api/v1/knowledge/", knowledgeHandler)
 	mux.Handle("/api/v1/templates", templatesHandler)
 	mux.Handle("/api/v1/templates/", templatesHandler)
+	mux.Handle("/api/v1/quick-notes", quickNotesHandler)
+	mux.Handle("/api/v1/quick-notes/", quickNotesHandler)
 
 	// Middleware chain: cors → auth → mux
 	handler := corsMiddleware(middleware.AuthMiddleware(cfg.JWTSecret)(mux))
