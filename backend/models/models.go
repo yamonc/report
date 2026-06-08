@@ -172,7 +172,7 @@ type UpdateQuickNoteReq struct {
 	Source  *string   `json:"source,omitempty"`
 }
 
-type SearchQuickNotesReq struct {
+type SearchQuickNoteReq struct {
 	Query string `json:"query"`
 }
 
@@ -182,7 +182,7 @@ type SearchResultItem struct {
 	Tags        []string `json:"tags"`
 	Score       int      `json:"score"`
 	MatchReason string   `json:"match_reason"`
-	CreatedAt   string   `json:"created_at"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type ArchiveQuickNoteReq struct {
