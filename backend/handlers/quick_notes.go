@@ -176,7 +176,7 @@ func (h *QuickNotesHandler) search(w http.ResponseWriter, r *http.Request) {
 
 	results, err := h.aiSvc.SearchQuickNotes(req.Query, notes)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "AI 搜索失败: " + err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	if results == nil {
@@ -202,8 +202,11 @@ func (h *QuickNotesHandler) archive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req models.ArchiveQuickNoteReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		req = models.ArchiveQuickNoteReq{}
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "请求格式错误"})
+			return
+		}
 	}
 
 	// Auto-generate title from first line if not provided
