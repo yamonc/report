@@ -46,7 +46,23 @@ func (s *Scheduler) Stop() {
 	close(s.stopCh)
 }
 
+var cnLoc *time.Location
+
+func getCNLocation() *time.Location {
+	if cnLoc != nil {
+		return cnLoc
+	}
+	var err error
+	cnLoc, err = time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		cnLoc = time.FixedZone("CST", 8*3600) // UTC+8 fallback
+	}
+	return cnLoc
+}
+
 func (s *Scheduler) checkAndSend(now time.Time) {
+	now = now.In(getCNLocation())
+
 	reminders, err := s.store.ListReminders()
 	if err != nil {
 		log.Printf("[Scheduler] Failed to list reminders: %v", err)
