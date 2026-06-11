@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Save, Loader2, Eye, Edit3, Trash2, LayoutTemplate } from 'lucide-react'
+import { Save, Loader2, Eye, Edit3, Trash2, LayoutTemplate, Download, Upload, X } from 'lucide-react'
 import Calendar from '../components/Calendar'
 import MarkdownEditor from '../components/MarkdownEditor'
 import MarkdownPreview from '../components/MarkdownPreview'
@@ -24,11 +24,17 @@ export default function DailyReportPage() {
   const [showTemplateManager, setShowTemplateManager] = useState(false)
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const toast = useToast()
 
   const d = new Date(date)
   const [viewYear, setViewYear] = useState(d.getFullYear())
   const [viewMonth, setViewMonth] = useState(d.getMonth() + 1)
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportYear, setExportYear] = useState(d.getFullYear())
+  const [exportMonth, setExportMonth] = useState(d.getMonth() + 1)
 
   useEffect(() => {
     if (paramDate) {
@@ -117,6 +123,74 @@ export default function DailyReportPage() {
     }
   }
 
+  // Ctrl+S shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSave()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [content, date])
+
+  // Export handler
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const m = String(exportMonth).padStart(2, '0')
+      const lastDay = new Date(exportYear, exportMonth, 0).getDate()
+      const monthStart = `${exportYear}-${m}-01`
+      const monthEnd = `${exportYear}-${m}-${String(lastDay).padStart(2, '0')}`
+      const md = await api.exportDailyReports(monthStart, monthEnd)
+
+      // Download file
+      const blob = new Blob([md], { type: 'text/plain;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${exportYear}年${exportMonth}月日报.md`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('导出成功')
+      setShowExportModal(false)
+    } catch {
+      toast.error('导出失败')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // Open export modal with current month as default
+  const openExportModal = () => {
+    setExportYear(viewYear)
+    setExportMonth(viewMonth)
+    setShowExportModal(true)
+  }
+
+  // Import handler
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const year = viewYear // Use current view year
+      const result = await api.importDailyReports(text, year)
+      toast.success(`成功导入 ${result.count} 条日报`)
+      fetchMonthReports()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '导入失败')
+    } finally {
+      setImporting(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
   const handleInsertTemplate = (t: Template) => {
     const inserted = t.fields.map(f => `## ${f}\n\n`).join('')
     setContent(prev => prev ? prev + '\n\n' + inserted : inserted)
@@ -147,6 +221,34 @@ export default function DailyReportPage() {
           </p>
         </div>
         <div className="flex items-center gap-2.5">
+          {/* Import/Export buttons */}
+          <button
+            onClick={openExportModal}
+            disabled={exporting}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-surface transition-all duration-200 disabled:opacity-40"
+            type="button"
+            title="导出日报为 Markdown"
+          >
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            导出
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".md"
+            onChange={handleImport}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-bg-elevated px-4 py-2.5 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-bg-surface transition-all duration-200 disabled:opacity-40"
+            type="button"
+            title="导入 Markdown 日报"
+          >
+            {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            导入
+          </button>
           <button
             onClick={() => setPreview(!preview)}
             className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 border ${
@@ -226,6 +328,61 @@ export default function DailyReportPage() {
           onInsert={handleInsertTemplate}
           showInsert
         />
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-up">
+          <div className="bg-bg-elevated rounded-xl shadow-xl border border-border p-6 w-80">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-text-primary">导出日报</h2>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="text-text-tertiary hover:text-text-secondary transition-colors"
+                type="button"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-sm text-text-secondary mb-1">年份</label>
+                  <select
+                    value={exportYear}
+                    onChange={(e) => setExportYear(Number(e.target.value))}
+                    className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/30"
+                  >
+                    {Array.from({ length: 10 }, (_, i) => viewYear - 5 + i).map((y) => (
+                      <option key={y} value={y}>{y}年</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-sm text-text-secondary mb-1">月份</label>
+                  <select
+                    value={exportMonth}
+                    onChange={(e) => setExportMonth(Number(e.target.value))}
+                    className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/30"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <option key={m} value={m}>{m}月</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-[#1a1a16] transition-all hover:bg-accent-soft disabled:opacity-40"
+                type="button"
+              >
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                导出 {exportYear}年{exportMonth}月日报
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

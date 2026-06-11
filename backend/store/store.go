@@ -145,6 +145,36 @@ func (s *Store) DeleteDailyReport(date string) error {
 	return nil
 }
 
+func (s *Store) SaveDailyReportsBatch(reports []models.DailyReport) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	now := time.Now()
+	for _, r := range reports {
+		existing, err := s.GetDailyReport(r.Date)
+		if err == nil {
+			r.CreatedAt = existing.CreatedAt
+		} else {
+			r.CreatedAt = now
+		}
+		r.UpdatedAt = now
+
+		_, err = tx.Exec(
+			`INSERT OR REPLACE INTO daily_reports (date, content, created_at, updated_at)
+			 VALUES (?, ?, ?, ?)`,
+			r.Date, r.Content, formatTime(r.CreatedAt), formatTime(r.UpdatedAt),
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 // ============ Weekly Reports ============
 
 func (s *Store) SaveWeeklyReport(r models.WeeklyReport) error {

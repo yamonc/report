@@ -23,6 +23,23 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
+async function requestText(url: string, options?: RequestInit): Promise<string> {
+  const headers: Record<string, string> = {}
+  const token = getToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  const res = await fetch(`${BASE}${url}`, {
+    headers,
+    ...options,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || '请求失败')
+  }
+  return res.text()
+}
+
 export const api = {
   // Auth
   login(email: string, password: string) {
@@ -55,6 +72,18 @@ export const api = {
     if (from) params.set('from', from)
     if (to) params.set('to', to)
     return request<DailyReport[]>(`/daily-reports?${params}`)
+  },
+  exportDailyReports(from?: string, to?: string) {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    return requestText(`/daily-reports/export?${params}`)
+  },
+  importDailyReports(content: string, year: number) {
+    return request<{ status: string; count: number }>('/daily-reports/import', {
+      method: 'POST',
+      body: JSON.stringify({ content, year }),
+    })
   },
 
   // Weekly reports
